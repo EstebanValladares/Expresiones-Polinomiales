@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Distribuciones Discretas</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main_app.css') }}">
+</head>
+<body>
+    <a href="/" class="back-btn">← Volver al Inicio</a>
+    
+    <h2>Calculos Discretos</h2>
+
+    <div class="main-layout">
+        <div class="controls">
+            <fieldset>
+                <legend>Configuración de Distribucion</legend>
+                <label for="distribution">Distribuciun:</label>
+                <select id="distribution" onchange="actualizarParametros()">
+                    <option value="poisson">Poisson</option>
+                    <option value="binomial_negativa">Binomial Negativa</option>
+                    <option value="normal">Normal</option>
+                </select>
+
+                <div id="dynamic-params"></div>
+            </fieldset>
+
+            <fieldset>
+                <legend>Operaciones</legend>
+                <label for="x_val">Valor x:</label>
+                <input type="number" id="x_val" value="1">
+                
+                <label class="checkbox-container">
+                    <input type="checkbox" id="acc"> Probabilidad Acumulada
+                </label>
+                
+                <button onclick="obtenerProbabilidad()">Calcular Probabilidad</button>
+                
+                <hr>
+                
+                <label for="cardinality">Cantidad de Muestras:</label>
+                <input type="number" id="cardinality" value="20">
+                
+                <button onclick="obtenerMuestra()">Generar Grafico</button>
+            </fieldset>
+        </div>
+
+        <div class="results">
+            <h3>Visualización de Datos</h3>
+            <div class="canvas-container">
+                <canvas id="plotCanvas"></canvas>
+            </div>
+            <pre id="output">// Los resultados JSON...</pre>
+        </div>
+    </div>
+
+    <script>
+        let chart = null;
+
+        function actualizarParametros() {
+            const dist = document.getElementById('distribution').value;
+            const container = document.getElementById('dynamic-params');
+            let html = '';
+
+            if (dist === 'poisson') {
+                html = '<label>Lambda (l): <input type="number" id="l" value="3"></label>';
+            } else if (dist === 'binomial_negativa') {
+                html = '<label>Éxitos (r): <input type="number" id="r" value="5"></label>' +
+                       '<label>Probabilidad (p): <input type="number" id="p" value="0.5" step="0.1" min="0" max="1"></label>';
+            } else if (dist === 'normal') {
+                html = '<label>Media (mu): <input type="number" id="mu" value="0"></label>' +
+                       '<label>Desv. Estándar (sd): <input type="number" id="sd" value="1"></label>';
+            }
+            container.innerHTML = html;
+        }
+        async function obtenerProbabilidad() {
+            const data = {
+                distribution: document.getElementById('distribution').value,
+                value: parseFloat(document.getElementById('x_val').value),
+                acc: document.getElementById('acc').checked
+            };
+            document.querySelectorAll('#dynamic-params input').forEach(i => data[i.id] = parseFloat(i.value));
+
+            try {
+                const res = await fetch('/probability', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                const result = await res.json();
+                document.getElementById('output').textContent = "Resultado:\n" + JSON.stringify(result, null, 2);
+            } catch (error) {
+                document.getElementById('output').textContent = "Error: " + error.message;
+            }
+        }
+        async function obtenerMuestra() {
+            const data = {
+                distribution: document.getElementById('distribution').value,
+                cardinality: parseInt(document.getElementById('cardinality').value)
+            };
+            
+            document.querySelectorAll('#dynamic-params input').forEach(i => data[i.id] = parseFloat(i.value));
+
+            try {
+                const res = await fetch('/sample', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                const result = await res.json();
+                document.getElementById('output').textContent = "Muestra generada correctamente.";
+                graficarDiscreta(result.sample, result.pmf_pdf_values);
+            } catch (error) {
+                document.getElementById('output').textContent = "Error al generar muestra: " + error.message;
+            }
+        }
+
+        function graficarDiscreta(muestras, valores) {
+            const ctx = document.getElementById('plotCanvas').getContext('2d');
+            if (chart) chart.destroy();
+            const combined = muestras.map((m, i) => ({x: m, y: valores[i]}))
+                                     .sort((a, b) => a.x - b.x);
+            chart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    datasets: [{
+                        label: 'Masa de Probabilidad (PMF)',
+                        data: combined,
+                        backgroundColor: 'rgba(67, 97, 238, 0.7)',
+                        borderColor: '#4361ee',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { 
+                            type: 'linear', 
+                            title: { display: true, text: 'Valor (k)' } 
+                        },
+                        y: { 
+                            beginAtZero: true,
+                            title: { display: true, text: 'Probabilidad' } 
+                        }
+                    }
+                }
+            });
+        }
+        window.onload = actualizarParametros;
+    </script>
+</body>
+</html>

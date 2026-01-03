@@ -1,69 +1,90 @@
-from flask import Flask, request, jsonify
-# Importamos las fábricas desde la carpeta 'python'
-# Asegúrate de tener un archivo vacío llamado __init__.py en esa carpeta
-from python.Distribucion_discretas import DistributionFactory as DiscreteFactory
-from python.Distribucion_continuas import ContinuousDistributionFactory as ContinuousFactory
+from flask import Flask, render_template, request, jsonify
+import sys
+import os
 
-app = Flask(__name__)
+# 1. Definición de rutas base (Solución al NameError)
+base_dir = os.path.abspath(os.path.dirname(__file__))
 
-def get_factory(category):
-    """Retorna la fábrica correspondiente según la categoría."""
-    if category.lower() == 'discreta':
-        return DiscreteFactory
-    elif category.lower() == 'continua':
-        return ContinuousFactory
-    else:
-        raise ValueError(f"Categoría '{category}' no válida. Use 'discreta' o 'continua'.")
+# 2. Configuración de Flask (Una sola vez, al principio)
+app = Flask(__name__, 
+            template_folder=os.path.join(base_dir, 'templates'),
+            static_folder=os.path.join(base_dir, 'static'))
 
-@app.route('/get_probability', methods=['POST'])
-def get_probability():
+# 3. Corrección de Ruta para la carpeta 'python'
+sys.path.append(os.path.join(base_dir, 'python'))
+
+# 4. Importaciones de tus módulos de distribución
+from Distribucion_discretas import DistributionFactory as DiscreteFactory
+from Distribucion_continuas import ContinuousDistributionFactory as ContinuousFactory
+
+# --- RUTAS DE NAVEGACIÓN ---
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/discretas')
+def discretas():
+    return render_template('discretas.html')
+
+@app.route('/continuas')
+def continuas():
+    return render_template('continuas.html')
+
+# --- LÓGICA DE DISTRIBUCIONES ---
+
+def get_distribution_instance(dist_name, params):
+    name = dist_name.lower()
+    
+    if name in ["gamma", "exponential"]:
+        return ContinuousFactory.create(name, **params)
+    
+    if name == "normal":
+        # Selección inteligente: si usa 'mu' es la discreta, si no, la continua
+        if "mu" in params:
+            return DiscreteFactory.create("normal", **params)
+        else:
+            return ContinuousFactory.create("normal", **params)
+            
+    return DiscreteFactory.create(name, **params)
+
+# --- ENDPOINTS API ---
+
+@app.route('/probability', methods=['POST'])
+def probability():
     data = request.get_json()
-    
-    dist_type = data.get('type')      # Ej: 'normal', 'poisson', 'gamma'
-    category = data.get('category')    # 'discreta' o 'continua'
-    value = data.get('value')         # El punto X a evaluar
-    acc = data.get('acc', False)      # Booleano para acumulada
-    params = data.get('params', {})   # Diccionario de parámetros (mu, sd, k, etc.)
-
     try:
-        factory = get_factory(category)
-        dist = factory.create(dist_type, **params)
+        dist_name = data.get('distribution')
+        value = data.get('value')
         
-        result = dist.getProbability(value, acc=acc)
-        return jsonify({
-            "status": "success",
-            "type": dist_type,
-            "category": category,
-            "probability": result
-        })
-    
+        # Filtramos parámetros para la instancia
+        params = {k: v for k, v in data.items() if k not in ['distribution', 'value', 'acc']}
+        
+        dist = get_distribution_instance(dist_name, params)
+        result = dist.getProbability(value, acc=data.get('acc', False))
+        
+        return jsonify({"probability": result})
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
+        return jsonify({"error": str(e)}), 400
 
-@app.route('/get_sample', methods=['POST'])
-def get_sample():
+@app.route('/sample', methods=['POST'])
+def sample():
     data = request.get_json()
-    
-    dist_type = data.get('type')
-    category = data.get('category')
-    n = data.get('n', 1)              # Cantidad de muestras
-    params = data.get('params', {})
-
     try:
-        factory = get_factory(category)
-        dist = factory.create(dist_type, **params)
+        dist_name = data.get('distribution')
+        n = data.get('cardinality', 1)
         
-        samples, pdf_values = dist.getSample(n)
+        params = {k: v for k, v in data.items() if k not in ['distribution', 'cardinality']}
+        
+        dist = get_distribution_instance(dist_name, params)
+        samples, density_values = dist.getSample(n)
+        
         return jsonify({
-            "status": "success",
-            "type": dist_type,
-            "samples": samples,
-            "density_or_pmf": pdf_values
+            "sample": samples,
+            "pmf_pdf_values": density_values
         })
-    
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
+        return jsonify({"error": str(e)}), 400
 
 if __name__ == '__main__':
-    # El servidor corre en http://127.0.0.1:5000
     app.run(debug=True, port=5000)

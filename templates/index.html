@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estadistica App - Inicio</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+</head>
+<body>
+    <div class="background-overlay"></div>
+    <main class="dashboard-container">
+        <header>
+            <h1>Servicios de Distribucion Estadistica</h1>
+        </header>
+
+        <nav class="options-grid">
+            <a href="/discretas" class="card">
+                <div class="card-icon">1,2,3</div>
+                <h3>Distribuciones Discretas</h3>
+                <p>Analisis de variables aleatorias con valores contables (Poisson, Binomial Negativa, etc.)</p>
+                <span class="btn-explore">Explorar</span>
+            </a>
+
+            <a href="/continuas" class="card">
+                <div class="card-icon">f(x)</div>
+                <h3>Distribuciones Continuas</h3>
+                <p>Analisis de variables aleatorias con valores en intervalos reales (Normal, Gamma, Exponencial.)</p>
+                <span class="btn-explore">Explorar</span>
+            </a>
+        </nav>
+    </main>
+</body>
+</html>

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Distribuciones Continuas</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main_app.css') }}">
+</head>
+<body>
+    <a href="/" class="back-btn">← Volver al Inicio</a>
+    
+    <h2>Cálculos Continuos</h2>
+
+    <div class="main-layout">
+        <div class="controls">
+            <fieldset>
+                <legend>Configuración</legend>
+                <label for="distribution">Distribución:</label>
+                <select id="distribution" onchange="actualizarParametros()">
+                    <option value="normal">Normal</option>
+                    <option value="gamma">Gamma</option>
+                    <option value="exponential">Exponencial</option>
+                </select>
+
+                <div id="dynamic-params"></div>
+            </fieldset>
+
+            <fieldset>
+                <legend>Acciones</legend>
+                <label>Valor x: <input type="number" id="x_val" value="1" step="0.1"></label>
+                <label><input type="checkbox" id="acc"> Acumulada</label>
+                <button onclick="obtenerProbabilidad()">Calcular Densidad/Prob</button>
+                <hr>
+                <label>Muestras: <input type="number" id="cardinality" value="100"></label>
+                <button onclick="obtenerMuestra()">Generar Curva</button>
+            </fieldset>
+        </div>
+
+        <div class="results">
+            <h3>Visualización de Datos</h3>
+            <div class="canvas-container">
+                <canvas id="plotCanvas"></canvas>
+            </div>
+            <pre id="output">// Los resultados JSON</pre>
+        </div>
+    </div>
+    
+    </body>
+</html>
+
+    <script>
+        let chart = null;
+
+        function actualizarParametros() {
+            const dist = document.getElementById('distribution').value;
+            const container = document.getElementById('dynamic-params');
+            let html = '';
+
+            if (dist === 'normal') {
+                html = '<label>Media (mean): <input type="number" id="mean" value="0"></label>' +
+                       '<label>Desv. Est (sd): <input type="number" id="sd" value="1"></label>'; 
+            } else if (dist === 'gamma') {
+                html = '<label>Forma (k): <input type="number" id="k" value="2"></label>' +
+                       '<label>Escala (theta): <input type="number" id="theta" value="2"></label>'; 
+            } else if (dist === 'exponential') {
+                html = '<label>Tasa (l): <input type="number" id="l" value="0.5"></label>'; 
+            }
+            container.innerHTML = html;
+        }
+
+        async function obtenerProbabilidad() {
+            const data = {
+                distribution: document.getElementById('distribution').value,
+                value: parseFloat(document.getElementById('x_val').value),
+                acc: document.getElementById('acc').checked
+            };
+            document.querySelectorAll('#dynamic-params input').forEach(i => data[i.id] = parseFloat(i.value));
+
+            const res = await fetch('/probability', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            document.getElementById('output').textContent = "Resultado: " + JSON.stringify(result);
+        }
+
+        async function obtenerMuestra() {
+            const data = {
+                distribution: document.getElementById('distribution').value,
+                cardinality: parseInt(document.getElementById('cardinality').value)
+            };
+            document.querySelectorAll('#dynamic-params input').forEach(i => data[i.id] = parseFloat(i.value));
+
+            const res = await fetch('/sample', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            graficarContinua(result.sample, result.pmf_pdf_values);
+        }
+
+        function graficarContinua(muestras, valores) {
+            const ctx = document.getElementById('plotCanvas').getContext('2d');
+            if (chart) chart.destroy();
+
+            const combined = muestras.map((m, i) => ({x: m, y: valores[i]})).sort((a, b) => a.x - b.x);
+
+            chart = new Chart(ctx, {
+                type: 'line', 
+                data: {
+                    datasets: [{
+                        label: 'Densidad (PDF)',
+                        data: combined,
+                        borderColor: '#e67e22',
+                        fill: true,
+                        backgroundColor: 'rgba(230, 126, 34, 0.2)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    scales: { x: { type: 'linear' }, y: { beginAtZero: true } }
+                }
+            });
+        }
+
+        window.onload = actualizarParametros;
+    </script>
+</body>
+</html>
